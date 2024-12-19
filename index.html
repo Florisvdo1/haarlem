@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Pixel Emoji Planner</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: #90c2ff; /* Sky background */
+    font-family: monospace;
+    user-select: none;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    overflow: hidden;
+  }
+
+  body, button {
+    image-rendering: pixelated;
+  }
+
+  /* Parallax pixel clouds */
+  .cloud-layer {
+    position: absolute;
+    width: 200%;
+    height: 200%;
+    top: -50%;
+    left: -50%;
+    background-repeat: repeat;
+    background-size: 200px 200px;
+    pointer-events: none;
+  }
+
+  .cloud-layer:nth-child(1) {
+    background-image: url('data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><text x="10" y="50" style="font-size:50px;">☁️</text></svg>');
+    animation: cloudsMove1 60s linear infinite;
+    opacity: 0.6;
+  }
+  .cloud-layer:nth-child(2) {
+    background-image: url('data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><text x="50" y="100" style="font-size:50px;">☁️</text></svg>');
+    animation: cloudsMove2 90s linear infinite reverse;
+    opacity: 0.3;
+  }
+
+  @keyframes cloudsMove1 {
+    0% { transform: translate(0,0); }
+    100% { transform: translate(50%,0); }
+  }
+  @keyframes cloudsMove2 {
+    0% { transform: translate(0,0); }
+    100% { transform: translate(-50%,0); }
+  }
+
+  .app-container {
+    position: relative;
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  header {
+    z-index: 1000;
+    background: rgba(255,255,255,0.8);
+    border-bottom: 2px solid #333;
+    padding: 0.3rem 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header h1 {
+    margin: 0; font-size: 1rem; font-weight: bold; text-shadow: 1px 1px #000;
+  }
+  header button {
+    background: #ffaf00;
+    border: 2px solid #333;
+    font-size: 0.8rem;
+    padding: 0.2rem 0.4rem;
+    cursor: pointer;
+    border-radius: 3px;
+    text-shadow: 1px 1px #000;
+  }
+  header button:active {
+    transform: scale(0.95);
+  }
+
+  .main {
+    flex: 1; position: relative;
+    display: flex; flex-direction: column; align-items: center;
+    padding-top: 0.5rem; overflow-y: auto;
+  }
+
+  .time-slot {
+    position: relative;
+    width: 90%; max-width: 350px;
+    height: 60px; margin: 0.5rem 0;
+    background: #fff8cc;
+    border: 3px solid #333;
+    border-radius: 8px;
+    display: flex; align-items: center;
+    box-shadow: 2px 2px #000;
+  }
+  .time-label {
+    width: 60px; text-align: center;
+    font-weight: bold; color: #333; text-shadow: 1px 1px #fff;
+  }
+  .drop-zone {
+    flex: 1; display: flex; flex-wrap: wrap; align-items: center;
+    padding: 0.5rem; position: relative;
+  }
+  .drop-zone::after {
+    content: '';
+    position: absolute; top:0; left:0; right:0; bottom:0;
+    border: 2px dashed transparent;
+    pointer-events: none;
+    transition: border-color 0.2s;
+  }
+  .drop-zone.magnet::after {
+    border-color: #ff00ff;
+    animation: spark 1s infinite linear;
+  }
+
+  @keyframes spark {
+    0% { box-shadow:0 0 5px #ff00ff; }
+    50% { box-shadow:0 0 10px #ff00ff; }
+    100% { box-shadow:0 0 5px #ff00ff; }
+  }
+
+  .emoji-palette {
+    position: relative; background: rgba(255,255,255,0.9);
+    border-top: 3px solid #333;
+    display: flex; flex-direction: column;
+  }
+  .palette-header {
+    text-align: center; font-size: 0.8rem;
+    padding: 0.3rem; background: #ffaf00; border-bottom: 2px solid #333;
+    font-weight: bold; text-shadow: 1px 1px #000;
+  }
+
+  .emoji-category-bar {
+    display: flex; overflow-x: auto; padding: 0.3rem;
+  }
+  .category-icon {
+    min-width: 40px; margin: 0.3rem; text-align: center; font-size: 1.5rem; cursor: pointer;
+    transition: transform 0.2s; 
+  }
+  .category-icon:hover { transform: scale(1.2); }
+
+  .emoji-grid {
+    display: flex; flex-wrap: nowrap; overflow-x: auto; padding: 0.5rem;
+  }
+
+  .emoji-item {
+    font-size: 1.8rem; margin: 0.3rem;
+    border: 2px solid #333; background: #fffbcc; border-radius: 4px;
+    box-shadow: 1px 1px #000; cursor: grab; touch-action: none;
+    animation: floaty 2s infinite ease-in-out alternate;
+  }
+  @keyframes floaty {
+    0% { transform: translateY(0px); }
+    100% { transform: translateY(-2px); }
+  }
+
+  .emoji-item.dragging {
+    opacity: 0.8; transform: scale(1.1);
+    animation: none; z-index: 9999; pointer-events: none;
+    position: fixed;
+  }
+</style>
+</head>
+<body>
+
+<div class="cloud-layer"></div>
+<div class="cloud-layer"></div>
+
+<div class="app-container">
+
+<header>
+  <h1 id="currentDate"></h1>
+  <button id="resetBtn">RESET</button>
+</header>
+
+<div class="main" id="main"></div>
+
+<div class="emoji-palette" id="emojiPalette">
+  <div class="palette-header">Emoji Deck</div>
+  <div class="emoji-category-bar" id="emojiCategoryBar">
+    <div class="category-icon" data-cat="morning">🌅</div>
+    <div class="category-icon" data-cat="work">💻</div>
+    <div class="category-icon" data-cat="food">🍎</div>
+    <div class="category-icon" data-cat="fitness">🏋️</div>
+    <div class="category-icon" data-cat="fun">🎵</div>
+  </div>
+  <div class="emoji-grid" id="emojiGrid"></div>
+</div>
+
+</div>
+
+<script>
+  const START_HOUR = 9;
+  const END_HOUR = 17;
+  const main = document.getElementById('main');
+  const currentDate = document.getElementById('currentDate');
+  const resetBtn = document.getElementById('resetBtn');
+  const emojiGrid = document.getElementById('emojiGrid');
+  const emojiCategoryBar = document.getElementById('emojiCategoryBar');
+
+  const today = new Date();
+  currentDate.textContent = today.toDateString();
+
+  const CATEGORIES = {
+    morning: ["☀️","☕","🥐","🏃‍♀️"],
+    work: ["💻","📚","✏️","📅"],
+    food: ["🍎","🍔","🍣","🍕","☕","🍰"],
+    fitness: ["🏋️","🚴‍♂️","🧘‍♂️","🏊‍♀️","🏃‍♂️"],
+    fun: ["🎵","🎮","🍿","🎨","🎉","🌈"]
+  };
+
+  let currentCategory = 'morning';
+  loadCategory(currentCategory);
+
+  // Build time slots
+  for (let h = START_HOUR; h < END_HOUR; h++) {
+    const slot = document.createElement('div');
+    slot.className = 'time-slot';
+    const label = document.createElement('div');
+    label.className = 'time-label';
+    label.textContent = `${h}:00`;
+    const dropZone = document.createElement('div');
+    dropZone.className = 'drop-zone';
+    dropZone.dataset.time = `${h}:00`;
+
+    slot.appendChild(label);
+    slot.appendChild(dropZone);
+    main.appendChild(slot);
+  }
+
+  // Switch categories
+  emojiCategoryBar.addEventListener('click', (e) => {
+    const cat = e.target.dataset.cat;
+    if (cat) {
+      currentCategory = cat;
+      loadCategory(cat);
+    }
+  });
+
+  function loadCategory(cat) {
+    emojiGrid.innerHTML = '';
+    (CATEGORIES[cat] || []).forEach(emojiChar => {
+      const item = document.createElement('div');
+      item.className = 'emoji-item';
+      item.textContent = emojiChar;
+      item.addEventListener('touchstart', handleTouchStart);
+      emojiGrid.appendChild(item);
+    });
+  }
+
+  // Drag & Drop
+  let dragElement = null;
+  let offsetX = 0, offsetY = 0;
+  let currentDropZone = null;
+  let originalParent = null;
+  let originalNextSibling = null;
+
+  function handleTouchStart(e) {
+    const touch = e.touches[0];
+    dragElement = e.currentTarget;
+    dragElement.classList.add('dragging');
+
+    originalParent = dragElement.parentNode;
+    originalNextSibling = dragElement.nextSibling;
+
+    const rect = dragElement.getBoundingClientRect();
+    offsetX = touch.clientX - rect.left;
+    offsetY = touch.clientY - rect.top;
+
+    positionDragElement(touch.clientX, touch.clientY);
+
+    document.addEventListener('touchmove', handleTouchMove, {passive:false});
+    document.addEventListener('touchend', handleTouchEnd);
+  }
+
+  function handleTouchMove(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    positionDragElement(touch.clientX, touch.clientY);
+
+    const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+    let dropZone = elemBelow ? elemBelow.closest('.drop-zone') : null;
+
+    if (dropZone !== currentDropZone) {
+      if (currentDropZone) {
+        currentDropZone.classList.remove('magnet');
+      }
+      currentDropZone = dropZone;
+      if (currentDropZone) {
+        currentDropZone.classList.add('magnet');
+      }
+    }
+  }
+
+  function handleTouchEnd(e) {
+    document.removeEventListener('touchmove', handleTouchMove);
+    document.removeEventListener('touchend', handleTouchEnd);
+
+    if (currentDropZone) {
+      currentDropZone.classList.remove('magnet');
+      currentDropZone.appendChild(dragElement);
+      saveLayout();
+    } else {
+      if (originalNextSibling) {
+        originalParent.insertBefore(dragElement, originalNextSibling);
+      } else {
+        originalParent.appendChild(dragElement);
+      }
+    }
+
+    dragElement.classList.remove('dragging');
+    dragElement.style.position = '';
+    dragElement.style.left = '';
+    dragElement.style.top = '';
+    dragElement = null;
+    currentDropZone = null;
+    originalParent = null;
+    originalNextSibling = null;
+  }
+
+  function positionDragElement(x, y) {
+    dragElement.style.position = 'fixed';
+    dragElement.style.left = (x - offsetX) + 'px';
+    dragElement.style.top = (y - offsetY) + 'px';
+  }
+
+  // Persistence
+  function saveLayout() {
+    const layout = [];
+    document.querySelectorAll('.drop-zone').forEach(zone => {
+      const time = zone.dataset.time;
+      const emojis = [];
+      zone.querySelectorAll('.emoji-item').forEach(e => {
+        emojis.push(e.textContent);
+      });
+      layout.push({time, emojis});
+    });
+    localStorage.setItem('pixelPlannerLayout', JSON.stringify(layout));
+  }
+
+  function loadLayout() {
+    const data = localStorage.getItem('pixelPlannerLayout');
+    if (data) {
+      const layout = JSON.parse(data);
+      layout.forEach(slot => {
+        const dz = document.querySelector(`.drop-zone[data-time="${slot.time}"]`);
+        if (dz) {
+          slot.emojis.forEach(emojiChar => {
+            const item = document.createElement('div');
+            item.className = 'emoji-item';
+            item.textContent = emojiChar;
+            item.addEventListener('touchstart', handleTouchStart);
+            dz.appendChild(item);
+          });
+        }
+      });
+    }
+  }
+
+  loadLayout();
+
+  resetBtn.addEventListener('click', () => {
+    localStorage.removeItem('pixelPlannerLayout');
+    document.querySelectorAll('.drop-zone').forEach(dz => dz.innerHTML = '');
+  });
+
+</script>
+</body>
+</html>
